@@ -34,20 +34,18 @@ local function sendSuggestionToUI(name, help, params)
     local formattedName = name:sub(1, 1) == '/' and name or ('/' .. name)
     local argsStr = parseParams(params)
 
-    suggestionsCache[formattedName:lower()] = {
+    local key = formattedName:lower()
+    local old = suggestionsCache[key]
+    suggestionsCache[key] = {
         name = formattedName,
-        help = help or '',
-        args = argsStr
+        help = (help and help ~= '') and help or (old and old.help) or '',
+        args = (argsStr ~= '') and argsStr or (old and old.args) or ''
     }
 
     if chatLoaded then
         SendNUIMessage({
             action = 'addSuggestion',
-            data = {
-                name = formattedName,
-                help = help or '',
-                args = argsStr
-            }
+            data = suggestionsCache[key]
         })
     end
 end
@@ -122,6 +120,7 @@ RegisterKeyMapping('open_custom_chat', 'Ouvrir le chat', 'keyboard', 'T')
 
 RegisterCommand('open_custom_chat', function()
     if not chatOpen then
+        registerSystemCommands()
         chatOpen = true
         cursorActive = false
         SetNuiFocus(true, false)
@@ -254,6 +253,19 @@ RegisterNetEvent('chatMessage', function(author, color, text)
     })
 end)
 
+RegisterNetEvent('__cfx_internal:serverPrint')
+AddEventHandler('__cfx_internal:serverPrint', function(msg)
+    SendNUIMessage({
+        action = 'addMessage',
+        data = {
+            author = '',
+            message = tostring(msg),
+            color = '#a3a3a3'
+        }
+    })
+    print(msg)
+end)
+
 RegisterNetEvent('chat:clear', function()
     SendNUIMessage({
         action = 'clearChat'
@@ -305,6 +317,10 @@ end)
 
 exports('addSuggestion', function(name, help, params)
     sendSuggestionToUI(name, help, params)
+end)
+
+exports('addSuggestions', function(suggestions)
+    TriggerEvent('chat:addSuggestions', suggestions)
 end)
 
 exports('removeSuggestion', function(name)

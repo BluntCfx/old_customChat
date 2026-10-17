@@ -1,5 +1,42 @@
 local registeredSuggestions = {}
 
+local function normalizeName(name)
+    return name:sub(1, 1) == '/' and name or ('/' .. name)
+end
+
+local function isAllowed(playerId, name)
+    if not Config.OnlyAllowedCommands then return true end
+    return IsPlayerAceAllowed(playerId, ('command.%s'):format((name:gsub('^/', ''))))
+end
+
+local function syncAllCommandsToPlayer(sourcePlayer)
+    local merged = {}
+
+
+    for _, cmd in ipairs(GetRegisteredCommands()) do
+        if isAllowed(sourcePlayer, cmd.name) then
+            merged[('/' .. cmd.name):lower()] = { name = '/' .. cmd.name, help = '', params = {} }
+        end
+    end
+
+
+    for _, item in pairs(registeredSuggestions) do
+        local name = normalizeName(item.name)
+        if isAllowed(sourcePlayer, name) then
+            merged[name:lower()] = { name = name, help = item.help or '', params = item.params or {} }
+        end
+    end
+
+    merged['/testchat'] = { name = '/testchat', help = 'Générer 30 messages de test', params = {} }
+
+    local sendQueue = {}
+    for _, item in pairs(merged) do
+        sendQueue[#sendQueue + 1] = item
+    end
+
+    TriggerClientEvent('chat:addSuggestions', sourcePlayer, sendQueue)
+end
+
 RegisterNetEvent('_chat:messageEntered', function(author, color, message)
     if not Config.EnableMessages then return end
     if not message or string.len(message) == 0 then return end
@@ -12,7 +49,7 @@ RegisterNetEvent('_chat:messageEntered', function(author, color, message)
     })
 end)
 
-RegisterNetEvent('chat:addSuggestion', function(name, help, params)
+AddEventHandler('chat:addSuggestion', function(name, help, params)
     registeredSuggestions[name] = {
         name = name,
         help = help or '',
@@ -21,7 +58,7 @@ RegisterNetEvent('chat:addSuggestion', function(name, help, params)
     TriggerClientEvent('chat:addSuggestion', -1, name, help, params)
 end)
 
-RegisterNetEvent('chat:addSuggestions', function(data)
+AddEventHandler('chat:addSuggestions', function(data)
     if type(data) ~= 'table' then return end
 
     if data.name then
@@ -45,46 +82,40 @@ RegisterNetEvent('chat:addSuggestions', function(data)
     TriggerClientEvent('chat:addSuggestions', -1, data)
 end)
 
-RegisterNetEvent('chat:removeSuggestion', function(name)
+AddEventHandler('chat:removeSuggestion', function(name)
     registeredSuggestions[name] = nil
     TriggerClientEvent('chat:removeSuggestion', -1, name)
 end)
 
 RegisterNetEvent('chat:init', function()
     local sourcePlayer = source
+    syncAllCommandsToPlayer(sourcePlayer)
+end)
 
-    local sendQueue = {}
-    for _, item in pairs(registeredSuggestions) do
-        table.insert(sendQueue, item)
+AddEventHandler('__cfx_internal:commandFallback', function(command)
+    local src = source
+
+    TriggerEvent('chatMessage', src, GetPlayerName(src), '/' .. command)
+
+    if not WasEventCanceled() then
+        TriggerClientEvent('chat:addMessage', src, {
+            args = { 'Serveur', "Cette commande n'existe pas" },
+            color = '#ef4444'
+        })
     end
 
-    if exports['es_extended'] then
-        local success, ESX = pcall(function()
-            return exports['es_extended']:getSharedObject()
-        end)
-        if success and ESX and ESX.GetCommands then
-            local commands = ESX.GetCommands()
-            for cmdName, cmdData in pairs(commands) do
-                local formatted = cmdName:sub(1, 1) == '/' and cmdName or ('/' .. cmdName)
-                local help = (cmdData.suggestion and cmdData.suggestion.help) or ''
-                local args = (cmdData.suggestion and cmdData.suggestion.arguments) or {}
-                table.insert(sendQueue, {
-                    name = formatted,
-                    help = help,
-                    params = args
-                })
-            end
-        end
+    CancelEvent()
+end)
+
+AddEventHandler('esx:playerLoaded', function(playerId)
+    syncAllCommandsToPlayer(playerId)
+end)
+
+AddEventHandler('onServerResourceStart', function()
+    Wait(500)
+    for _, id in ipairs(GetPlayers()) do
+        syncAllCommandsToPlayer(tonumber(id))
     end
-
-    table.insert(sendQueue, {
-        name = '/testchat',
-        help = 'Générer 30 messages de test',
-        params = {}
-    })
-
-    TriggerClientEvent('chat:addSuggestions', sourcePlayer, sendQueue)
-    TriggerClientEvent('chat:reloadSuggestions', sourcePlayer)
 end)
 
 RegisterCommand('clear', function(source)
@@ -92,7 +123,6 @@ RegisterCommand('clear', function(source)
         TriggerClientEvent('chat:clear', source)
     end
 end, false)
-
 
 RegisterCommand('testchat', function(source)
     local dummyNames = {
