@@ -6,8 +6,6 @@ Config.Placeholder = "Que voulez-vous faire..."
 
 Config.EnableEmojis = true
 
-Config.OnlyAllowedCommands = false
-
 Config.BlacklistedEmojis = {
     '🖕',
     '💩'

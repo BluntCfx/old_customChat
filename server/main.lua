@@ -4,27 +4,18 @@ local function normalizeName(name)
     return name:sub(1, 1) == '/' and name or ('/' .. name)
 end
 
-local function isAllowed(playerId, name)
-    if not Config.OnlyAllowedCommands then return true end
-    return IsPlayerAceAllowed(playerId, ('command.%s'):format((name:gsub('^/', ''))))
-end
-
 local function syncAllCommandsToPlayer(sourcePlayer)
     local merged = {}
 
 
     for _, cmd in ipairs(GetRegisteredCommands()) do
-        if isAllowed(sourcePlayer, cmd.name) then
-            merged[('/' .. cmd.name):lower()] = { name = '/' .. cmd.name, help = '', params = {} }
-        end
+        merged[('/' .. cmd.name):lower()] = { name = '/' .. cmd.name, help = '', params = {} }
     end
 
 
     for _, item in pairs(registeredSuggestions) do
         local name = normalizeName(item.name)
-        if isAllowed(sourcePlayer, name) then
-            merged[name:lower()] = { name = name, help = item.help or '', params = item.params or {} }
-        end
+        merged[name:lower()] = { name = name, help = item.help or '', params = item.params or {} }
     end
 
     merged['/testchat'] = { name = '/testchat', help = 'Générer 30 messages de test', params = {} }
@@ -105,10 +96,6 @@ AddEventHandler('__cfx_internal:commandFallback', function(command)
     end
 
     CancelEvent()
-end)
-
-AddEventHandler('esx:playerLoaded', function(playerId)
-    syncAllCommandsToPlayer(playerId)
 end)
 
 AddEventHandler('onServerResourceStart', function()
